@@ -400,6 +400,62 @@ input::placeholder {
   max-width: 90%;
 }
 
+/* ===== QUICK REPLIES ===== */
+.quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.25rem 0 0.5rem 0;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.quick-reply-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border: 1.5px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.quick-reply-btn:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+.quick-reply-btn:active {
+  transform: scale(0.96);
+}
+
+.quick-reply-btn.confirm {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.quick-reply-btn.confirm:hover {
+  background: var(--primary-hover);
+}
+
+.quick-reply-btn.adjust {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.quick-reply-btn.adjust:hover {
+  background: var(--bg-input);
+  color: var(--text);
+}
+
 /* ===== TARGET INFO ===== */
 .target-info {
   background: var(--bg-card);

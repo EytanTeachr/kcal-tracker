@@ -235,6 +235,81 @@ export default function Dashboard({ profile }) {
     setEditing(null);
   };
 
+  // Parse numbered choices from AI message (e.g. "1. Option A\n2. Option B")
+  const parseChoices = (content) => {
+    const lines = content.split('\n');
+    const choices = [];
+    const textLines = [];
+    for (const line of lines) {
+      const match = line.match(/^(\d+)\.\s+(.+)/);
+      if (match) {
+        choices.push({ num: match[1], label: match[2].trim() });
+      } else {
+        textLines.push(line);
+      }
+    }
+    return { text: textLines.join('\n').trim(), choices };
+  };
+
+  // Check if message ends with a confirmation question
+  const needsConfirmation = (content) => {
+    const lower = content.toLowerCase();
+    return lower.includes('on valide') || lower.includes('ok ?') || lower.includes('ça te va ?') || lower.includes('c\'est bon ?');
+  };
+
+  // Handle quick reply (choice button or yes/no)
+  const handleQuickReply = (text) => {
+    setInput(text);
+    setTimeout(() => {
+      const fakeEvent = { key: 'Enter' };
+      // Directly call send with this text
+      setInput('');
+      setMessages((prev) => [...prev, { role: 'user', content: text }]);
+      const newHistory = [...apiHistory, { role: 'user', content: text }];
+      setApiHistory(newHistory);
+      setLoading(true);
+
+      chatWithAI(profile.apiKey, newHistory, chatMode)
+        .then(async (result) => {
+          if (result.type === 'final') {
+            const emoji = chatMode === 'meal' || chatMode === 'photo' ? '🍽️' : '🏃';
+            const summary = result.items
+              .map((it) => `${emoji} ${it.description} — ${it.kcal} kcal`)
+              .join('\n');
+            setMessages((prev) => [...prev, { role: 'assistant', content: summary }]);
+            setApiHistory((prev) => [...prev, { role: 'assistant', content: result.displayText || summary }]);
+
+            const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            const entries = result.items.map((item) => ({
+              description: item.description, kcal: item.kcal,
+              proteins: item.proteins || 0, lipids: item.lipids || 0, carbs: item.carbs || 0,
+              detail: result.detail || '', time,
+            }));
+            const type = chatMode === 'activity' ? 'activity' : 'meal';
+            await addMultipleEntries(profile.id, selectedDate, type, entries, result.advice);
+            await reloadEntries();
+
+            if (result.advice) {
+              setTimeout(() => {
+                setMessages((prev) => [...prev, { role: 'advice', content: result.advice }, { role: 'system', content: 'Ajouté ! Tu peux continuer ou fermer le chat.' }]);
+              }, 300);
+            } else {
+              setTimeout(() => {
+                setMessages((prev) => [...prev, { role: 'system', content: 'Ajouté ! Tu peux continuer ou fermer le chat.' }]);
+              }, 500);
+            }
+          } else {
+            setMessages((prev) => [...prev, { role: 'assistant', content: result.content }]);
+            setApiHistory((prev) => [...prev, { role: 'assistant', content: result.content }]);
+          }
+        })
+        .catch((err) => {
+          setMessages((prev) => [...prev, { role: 'assistant', content: `Erreur : ${err.message}` }]);
+        })
+        .finally(() => setLoading(false));
+    }, 0);
+  };
+
   const statusColor = { green: '#4ade80', yellow: '#facc15', red: '#f87171' };
 
   const isEditing = (type, index) =>
@@ -498,11 +573,49 @@ export default function Dashboard({ profile }) {
                     ? 'Dis-moi ce que tu as mangé ! Je vais te poser des questions si besoin pour estimer au mieux les calories.'
                     : 'Dis-moi quelle activité tu as faite ! Je vais te poser des questions si besoin pour estimer les calories brûlées.'}
                 </div>
-                {messages.map((msg, i) => (
-                  <div key={i} className={`message ${msg.role}`}>
-                    {msg.content}
-                  </div>
-                ))}
+                {messages.map((msg, i) => {
+                  if (msg.role === 'assistant') {
+                    const { text, choices } = parseChoices(msg.content);
+                    const showConfirm = choices.length === 0 && needsConfirmation(msg.content);
+                    const isLastAssistant = i === messages.length - 1 ||
+                      messages.slice(i + 1).every((m) => m.role !== 'user');
+                    return (
+                      <div key={i}>
+                        <div className="message assistant">
+                          {choices.length > 0 ? text : msg.content}
+                        </div>
+                        {choices.length > 0 && isLastAssistant && !loading && (
+                          <div className="quick-replies">
+                            {choices.map((c) => (
+                              <button
+                                key={c.num}
+                                className="quick-reply-btn"
+                                onClick={() => handleQuickReply(c.num)}
+                              >
+                                {c.num}. {c.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {showConfirm && isLastAssistant && !loading && (
+                          <div className="quick-replies">
+                            <button className="quick-reply-btn confirm" onClick={() => handleQuickReply('Oui')}>
+                              Oui, valide !
+                            </button>
+                            <button className="quick-reply-btn adjust" onClick={() => handleQuickReply('Non, ajuste')}>
+                              Modifier
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={i} className={`message ${msg.role}`}>
+                      {msg.content}
+                    </div>
+                  );
+                })}
                 {loading && (
                   <div className="message assistant loading">
                     <span className="dots">...</span>
