@@ -14,6 +14,7 @@ function mapProfile(data) {
     targetDate: data.target_date,
     apiKey: data.api_key,
     occasion: data.occasion || '',
+    dailyProteinGoal: data.daily_protein_goal || 0,
     createdAt: data.created_at,
   };
 }
@@ -47,6 +48,7 @@ export async function createProfile(profile) {
       target_date: profile.targetDate,
       api_key: profile.apiKey,
       occasion: profile.occasion || '',
+      daily_protein_goal: profile.dailyProteinGoal || 0,
     })
     .select()
     .single();
@@ -66,6 +68,7 @@ export async function updateProfile(profile) {
       target_date: profile.targetDate,
       api_key: profile.apiKey,
       occasion: profile.occasion || '',
+      daily_protein_goal: profile.dailyProteinGoal || 0,
     })
     .eq('id', profile.id);
 
@@ -93,6 +96,10 @@ export async function getEntriesForDate(profileId, dateStr) {
       id: row.id,
       description: row.description,
       kcal: row.kcal,
+      proteins: parseFloat(row.proteins) || 0,
+      lipids: parseFloat(row.lipids) || 0,
+      carbs: parseFloat(row.carbs) || 0,
+      advice: row.advice || '',
       detail: row.detail || '',
       time: row.entry_time || '',
     };
@@ -105,8 +112,11 @@ export async function getEntriesForDate(profileId, dateStr) {
 
   const totalIn = meals.reduce((sum, m) => sum + m.kcal, 0);
   const totalOut = activities.reduce((sum, a) => sum + a.kcal, 0);
+  const totalProteins = meals.reduce((sum, m) => sum + m.proteins, 0);
+  const totalLipids = meals.reduce((sum, m) => sum + m.lipids, 0);
+  const totalCarbs = meals.reduce((sum, m) => sum + m.carbs, 0);
 
-  return { meals, activities, totalIn, totalOut };
+  return { meals, activities, totalIn, totalOut, totalProteins, totalLipids, totalCarbs };
 }
 
 export async function addEntry(profileId, dateStr, type, entry) {
@@ -118,6 +128,10 @@ export async function addEntry(profileId, dateStr, type, entry) {
       type,
       description: entry.description,
       kcal: entry.kcal,
+      proteins: entry.proteins || 0,
+      lipids: entry.lipids || 0,
+      carbs: entry.carbs || 0,
+      advice: entry.advice || '',
       detail: entry.detail || '',
       entry_time: entry.time || '',
     })
@@ -130,18 +144,26 @@ export async function addEntry(profileId, dateStr, type, entry) {
     id: data.id,
     description: data.description,
     kcal: data.kcal,
+    proteins: parseFloat(data.proteins) || 0,
+    lipids: parseFloat(data.lipids) || 0,
+    carbs: parseFloat(data.carbs) || 0,
+    advice: data.advice || '',
     detail: data.detail,
     time: data.entry_time,
   };
 }
 
-export async function addMultipleEntries(profileId, dateStr, type, entries) {
+export async function addMultipleEntries(profileId, dateStr, type, entries, advice) {
   const rows = entries.map((entry) => ({
     profile_id: profileId,
     entry_date: dateStr,
     type,
     description: entry.description,
     kcal: entry.kcal,
+    proteins: entry.proteins || 0,
+    lipids: entry.lipids || 0,
+    carbs: entry.carbs || 0,
+    advice: advice || entry.advice || '',
     detail: entry.detail || '',
     entry_time: entry.time || '',
   }));
@@ -157,6 +179,10 @@ export async function addMultipleEntries(profileId, dateStr, type, entries) {
     id: row.id,
     description: row.description,
     kcal: row.kcal,
+    proteins: parseFloat(row.proteins) || 0,
+    lipids: parseFloat(row.lipids) || 0,
+    carbs: parseFloat(row.carbs) || 0,
+    advice: row.advice || '',
     detail: row.detail,
     time: row.entry_time,
   }));

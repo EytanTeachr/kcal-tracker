@@ -7,6 +7,7 @@ export default function Settings({ profile, onUpdate, onLogout }) {
   const [targetWeightLoss, setTargetWeightLoss] = useState(profile.targetWeightLoss);
   const [targetDate, setTargetDate] = useState(profile.targetDate);
   const [occasion, setOccasion] = useState(profile.occasion || '');
+  const [dailyProteinGoal, setDailyProteinGoal] = useState(profile.dailyProteinGoal || '');
   const [apiKey, setApiKey] = useState(profile.apiKey || '');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -22,6 +23,7 @@ export default function Settings({ profile, onUpdate, onLogout }) {
         targetWeightLoss: parseFloat(targetWeightLoss),
         targetDate,
         occasion,
+        dailyProteinGoal: parseInt(dailyProteinGoal, 10) || 0,
         apiKey,
       };
       await updateProfile(updated);
@@ -79,6 +81,16 @@ export default function Settings({ profile, onUpdate, onLogout }) {
             type="date"
             value={targetDate}
             onChange={(e) => setTargetDate(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Objectif protéines par jour (g)</label>
+          <input
+            type="number"
+            value={dailyProteinGoal}
+            onChange={(e) => setDailyProteinGoal(e.target.value)}
+            placeholder="Ex: 130"
           />
         </div>
 

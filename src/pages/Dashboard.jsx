@@ -102,20 +102,34 @@ export default function Dashboard({ profile }) {
         const entries = result.items.map((item) => ({
           description: item.description,
           kcal: item.kcal,
+          proteins: item.proteins || 0,
+          lipids: item.lipids || 0,
+          carbs: item.carbs || 0,
           detail: result.detail || '',
           time,
         }));
 
         const type = chatMode === 'meal' ? 'meal' : 'activity';
-        await addMultipleEntries(profile.id, selectedDate, type, entries);
+        await addMultipleEntries(profile.id, selectedDate, type, entries, result.advice);
         await reloadEntries();
 
-        setTimeout(() => {
-          setMessages((prev) => [
-            ...prev,
-            { role: 'system', content: 'Ajouté ! Tu peux continuer ou fermer le chat.' },
-          ]);
-        }, 500);
+        // Show advice if available
+        if (result.advice) {
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'advice', content: result.advice },
+              { role: 'system', content: 'Ajouté ! Tu peux continuer ou fermer le chat.' },
+            ]);
+          }, 300);
+        } else {
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'system', content: 'Ajouté ! Tu peux continuer ou fermer le chat.' },
+            ]);
+          }, 500);
+        }
       } else {
         setMessages((prev) => [...prev, { role: 'assistant', content: result.content }]);
         setApiHistory((prev) => [...prev, { role: 'assistant', content: result.content }]);
@@ -162,12 +176,22 @@ export default function Dashboard({ profile }) {
           const summary = result.items.map((it) => `🍽️ ${it.description} — ${it.kcal} kcal`).join('\n');
           setMessages([{ role: 'assistant', content: summary }]);
           const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-          const entries = result.items.map((item) => ({ description: item.description, kcal: item.kcal, detail: result.detail || '', time }));
-          await addMultipleEntries(profile.id, selectedDate, 'meal', entries);
+          const entries = result.items.map((item) => ({
+            description: item.description, kcal: item.kcal,
+            proteins: item.proteins || 0, lipids: item.lipids || 0, carbs: item.carbs || 0,
+            detail: result.detail || '', time,
+          }));
+          await addMultipleEntries(profile.id, selectedDate, 'meal', entries, result.advice);
           await reloadEntries();
-          setTimeout(() => {
-            setMessages((prev) => [...prev, { role: 'system', content: 'Ajouté !' }]);
-          }, 500);
+          if (result.advice) {
+            setTimeout(() => {
+              setMessages((prev) => [...prev, { role: 'advice', content: result.advice }, { role: 'system', content: 'Ajouté !' }]);
+            }, 300);
+          } else {
+            setTimeout(() => {
+              setMessages((prev) => [...prev, { role: 'system', content: 'Ajouté !' }]);
+            }, 500);
+          }
         } else {
           setMessages([{ role: 'assistant', content: result.content }]);
           setApiHistory((prev) => [...prev, { role: 'assistant', content: result.content }]);
@@ -281,6 +305,40 @@ export default function Dashboard({ profile }) {
             </div>
           </div>
 
+          {/* Macros overview */}
+          {dayLog.totalProteins > 0 && (
+            <div className="macros-card">
+              <div className="macros-row">
+                <div className="macro-item">
+                  <span className="macro-label">Prot.</span>
+                  <span className="macro-value prot">{Math.round(dayLog.totalProteins)}g</span>
+                  {profile.dailyProteinGoal > 0 && (
+                    <span className="macro-goal">/ {profile.dailyProteinGoal}g</span>
+                  )}
+                </div>
+                <div className="macro-item">
+                  <span className="macro-label">Lip.</span>
+                  <span className="macro-value lip">{Math.round(dayLog.totalLipids)}g</span>
+                </div>
+                <div className="macro-item">
+                  <span className="macro-label">Gluc.</span>
+                  <span className="macro-value carb">{Math.round(dayLog.totalCarbs)}g</span>
+                </div>
+              </div>
+              {profile.dailyProteinGoal > 0 && (
+                <div className="progress-bar-container" style={{ marginTop: '0.5rem' }}>
+                  <div
+                    className="progress-bar"
+                    style={{
+                      width: `${Math.min(100, (dayLog.totalProteins / profile.dailyProteinGoal) * 100)}%`,
+                      backgroundColor: dayLog.totalProteins >= profile.dailyProteinGoal ? '#4ade80' : '#6366f1',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Target progress bar */}
           {target && (
             <div className="target-info">
@@ -336,11 +394,23 @@ export default function Dashboard({ profile }) {
                       </div>
                     </div>
                   ) : (
-                    <div key={m.id || i} className="entry-item clickable" onClick={() => handleStartEdit('meal', i)}>
-                      <span className="entry-time">{m.time}</span>
-                      <span className="entry-desc">{m.description}</span>
-                      <span className="entry-kcal">+{m.kcal} kcal</span>
-                      <span className="entry-edit-icon">✏️</span>
+                    <div key={m.id || i} className="entry-item-wrapper">
+                      <div className="entry-item clickable" onClick={() => handleStartEdit('meal', i)}>
+                        <span className="entry-time">{m.time}</span>
+                        <span className="entry-desc">{m.description}</span>
+                        <span className="entry-kcal">+{m.kcal} kcal</span>
+                        <span className="entry-edit-icon">✏️</span>
+                      </div>
+                      {m.proteins > 0 && (
+                        <div className="entry-macros">
+                          <span className="em-prot">P:{Math.round(m.proteins)}g</span>
+                          <span className="em-lip">L:{Math.round(m.lipids)}g</span>
+                          <span className="em-carb">G:{Math.round(m.carbs)}g</span>
+                        </div>
+                      )}
+                      {m.advice && (
+                        <div className="entry-advice">{m.advice}</div>
+                      )}
                     </div>
                   )
                 )}

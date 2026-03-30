@@ -10,6 +10,7 @@ export default function Setup({ onComplete }) {
   const [targetWeightLoss, setTargetWeightLoss] = useState('');
   const [targetDate, setTargetDate] = useState('');
   const [occasion, setOccasion] = useState('');
+  const [dailyProteinGoal, setDailyProteinGoal] = useState('');
   const [apiKey, setApiKey] = useState(import.meta.env.VITE_OPENAI_API_KEY || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -28,6 +29,7 @@ export default function Setup({ onComplete }) {
           targetDate,
           apiKey,
           occasion,
+          dailyProteinGoal: parseInt(dailyProteinGoal, 10) || 0,
         });
         onComplete(profile);
       } catch (err) {
@@ -115,6 +117,17 @@ export default function Setup({ onComplete }) {
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
               min={new Date().toISOString().split('T')[0]}
+              onKeyDown={(e) => e.key === 'Enter' && canNext() && handleNext()}
+            />
+            <p style={{ marginTop: '1.5rem' }}>Objectif protéines par jour (g)</p>
+            <p className="hint">
+              En général 1.6 à 2.2g par kg de poids de corps. Ex: 70kg = ~120-150g/jour.
+            </p>
+            <input
+              type="number"
+              placeholder="Ex: 130 (optionnel)"
+              value={dailyProteinGoal}
+              onChange={(e) => setDailyProteinGoal(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && canNext() && handleNext()}
             />
           </div>

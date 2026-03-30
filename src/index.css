@@ -314,6 +314,91 @@ input::placeholder {
   margin-top: 0.25rem;
 }
 
+/* ===== MACROS CARD ===== */
+.macros-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  box-shadow: var(--shadow);
+}
+
+.macros-row {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.macro-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.macro-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.macro-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.macro-value.prot { color: #60a5fa; }
+.macro-value.lip { color: #f59e0b; }
+.macro-value.carb { color: #a78bfa; }
+
+.macro-goal {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ===== ENTRY MACROS & ADVICE ===== */
+.entry-item-wrapper {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.entry-macros {
+  display: flex;
+  gap: 0.75rem;
+  padding-left: 45px;
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
+}
+
+.em-prot { color: #60a5fa; }
+.em-lip { color: #f59e0b; }
+.em-carb { color: #a78bfa; }
+
+.entry-advice {
+  padding-left: 45px;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  font-style: italic;
+  background: rgba(99, 102, 241, 0.05);
+  padding: 0.4rem 0.5rem 0.4rem 45px;
+  border-radius: 6px;
+  margin-top: 0.3rem;
+}
+
+/* ===== ADVICE MESSAGE IN CHAT ===== */
+.message.advice {
+  background: rgba(99, 102, 241, 0.12);
+  border-left: 3px solid var(--primary);
+  color: var(--text);
+  align-self: flex-start;
+  font-size: 0.85rem;
+  font-style: italic;
+  max-width: 90%;
+}
+
 /* ===== TARGET INFO ===== */
 .target-info {
   background: var(--bg-card);
