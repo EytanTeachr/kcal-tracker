@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { updateProfile, deleteAllData } from '../utils/db';
 
-export default function Settings({ profile, onUpdate }) {
+export default function Settings({ profile, onUpdate, onLogout }) {
   const [firstName, setFirstName] = useState(profile.firstName);
   const [basalMetabolism, setBasalMetabolism] = useState(profile.basalMetabolism);
   const [targetWeightLoss, setTargetWeightLoss] = useState(profile.targetWeightLoss);
   const [targetDate, setTargetDate] = useState(profile.targetDate);
+  const [occasion, setOccasion] = useState(profile.occasion || '');
   const [apiKey, setApiKey] = useState(profile.apiKey || '');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -20,6 +21,7 @@ export default function Settings({ profile, onUpdate }) {
         basalMetabolism: parseInt(basalMetabolism, 10),
         targetWeightLoss: parseFloat(targetWeightLoss),
         targetDate,
+        occasion,
         apiKey,
       };
       await updateProfile(updated);
@@ -81,6 +83,16 @@ export default function Settings({ profile, onUpdate }) {
         </div>
 
         <div className="form-group">
+          <label>Occasion / Motivation</label>
+          <input
+            type="text"
+            value={occasion}
+            onChange={(e) => setOccasion(e.target.value)}
+            placeholder="Ex: Mariage en juillet (optionnel)"
+          />
+        </div>
+
+        <div className="form-group">
           <label>Clé API OpenAI</label>
           <input
             type="password"
@@ -93,6 +105,12 @@ export default function Settings({ profile, onUpdate }) {
         <button className="btn-primary" onClick={handleSave} disabled={saving}>
           {saved ? '✓ Sauvegardé !' : saving ? 'Sauvegarde...' : 'Sauvegarder'}
         </button>
+
+        <div className="logout-section">
+          <button className="btn-secondary" onClick={onLogout} style={{ width: '100%' }}>
+            Se déconnecter
+          </button>
+        </div>
 
         <div className="danger-zone">
           <h3>Zone dangereuse</h3>

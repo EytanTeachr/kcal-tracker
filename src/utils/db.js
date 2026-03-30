@@ -1,38 +1,13 @@
-// Database operations layer using Supabase
-// Falls back to localStorage if Supabase is unavailable
+// Database operations layer using Supabase + Auth
 
 import { supabase } from './supabase';
 
-const LOCAL_PROFILE_KEY = 'kcal_profile_id';
-
 // ============ PROFILE ============
-
-function getLocalProfileId() {
-  return localStorage.getItem(LOCAL_PROFILE_KEY);
-}
-
-function setLocalProfileId(id) {
-  localStorage.setItem(LOCAL_PROFILE_KEY, id);
-}
-
-export async function getProfile() {
-  const id = getLocalProfileId();
-  if (!id) return null;
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error || !data) return null;
-
-  return mapProfile(data);
-}
 
 function mapProfile(data) {
   return {
     id: data.id,
+    userId: data.user_id,
     firstName: data.first_name,
     basalMetabolism: data.basal_metabolism,
     targetWeightLoss: parseFloat(data.target_weight_loss),
@@ -43,10 +18,29 @@ function mapProfile(data) {
   };
 }
 
+export async function getProfile() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('user_id', user.id)
+    .single();
+
+  if (error || !data) return null;
+
+  return mapProfile(data);
+}
+
 export async function createProfile(profile) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Non connecté');
+
   const { data, error } = await supabase
     .from('profiles')
     .insert({
+      user_id: user.id,
       first_name: profile.firstName,
       basal_metabolism: profile.basalMetabolism,
       target_weight_loss: profile.targetWeightLoss,
@@ -59,7 +53,6 @@ export async function createProfile(profile) {
 
   if (error) throw new Error(`Erreur création profil: ${error.message}`);
 
-  setLocalProfileId(data.id);
   return mapProfile(data);
 }
 
@@ -206,7 +199,6 @@ export async function getEntriesForMonth(profileId, year, month) {
 
   if (error) throw new Error(`Erreur chargement mois: ${error.message}`);
 
-  // Group by date
   const grouped = {};
   for (const row of data || []) {
     const d = row.entry_date;
@@ -248,10 +240,25 @@ export async function getEntriesForWeek(profileId, mondayStr, sundayStr) {
 // ============ RESET ============
 
 export async function deleteAllData() {
-  const id = getLocalProfileId();
-  if (id) {
-    await supabase.from('daily_entries').delete().eq('profile_id', id);
-    await supabase.from('profiles').delete().eq('id', id);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // Get profile for this user
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .single();
+
+  if (profile) {
+    await supabase.from('daily_entries').delete().eq('profile_id', profile.id);
+    await supabase.from('profiles').delete().eq('id', profile.id);
   }
-  localStorage.removeItem(LOCAL_PROFILE_KEY);
+}
+
+// ============ AUTH ============
+
+export async function signOut() {
+  await supabase.auth.signOut();
+  sessionStorage.removeItem('kcal_session_only');
 }
