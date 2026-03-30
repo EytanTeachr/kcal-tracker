@@ -169,6 +169,7 @@ body {
 
 /* ===== INPUTS ===== */
 input[type="text"],
+input[type="email"],
 input[type="number"],
 input[type="date"],
 input[type="password"] {
