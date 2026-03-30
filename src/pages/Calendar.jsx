@@ -1,46 +1,94 @@
-import { useState, useMemo } from 'react';
-import { getDailyLogs } from '../utils/storage';
-import { getDailyTarget, getDayBalance, getDayStatus, formatDate, formatDateFR, kcalToKgFat } from '../utils/kcal';
+import { useState, useEffect, useMemo } from 'react';
+import { getEntriesForMonth, getEntriesForWeek } from '../utils/db';
+import { getDailyTarget, getDayStatus, formatDate, kcalToKgFat } from '../utils/kcal';
 
 export default function Calendar({ profile, onViewDay }) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
   });
+  const [monthData, setMonthData] = useState({});
+  const [weekData, setWeekData] = useState({});
+  const [loadingMonth, setLoadingMonth] = useState(true);
 
-  const logs = getDailyLogs();
   const target = getDailyTarget(profile);
+
+  // Load month data
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingMonth(true);
+    getEntriesForMonth(profile.id, currentMonth.year, currentMonth.month)
+      .then((data) => {
+        if (!cancelled) setMonthData(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingMonth(false);
+      });
+    return () => { cancelled = true; };
+  }, [profile.id, currentMonth.year, currentMonth.month]);
+
+  // Load week data
+  useEffect(() => {
+    const today = new Date();
+    const dayOfWeek = (today.getDay() + 6) % 7;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - dayOfWeek);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    getEntriesForWeek(profile.id, formatDate(monday), formatDate(sunday))
+      .then(setWeekData)
+      .catch(() => {});
+  }, [profile.id]);
+
+  const weekSummary = useMemo(() => {
+    let totalDeficit = 0;
+    let daysWithData = 0;
+
+    for (const dateStr of Object.keys(weekData)) {
+      const day = weekData[dateStr];
+      if (day.totalIn > 0 || day.totalOut > 0) {
+        const totalOut = day.totalOut + profile.basalMetabolism;
+        totalDeficit += totalOut - day.totalIn;
+        daysWithData++;
+      }
+    }
+
+    return { totalDeficit, daysWithData, kgFat: kcalToKgFat(totalDeficit) };
+  }, [weekData, profile.basalMetabolism]);
 
   const daysInMonth = useMemo(() => {
     const { year, month } = currentMonth;
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const startPad = (firstDay.getDay() + 6) % 7; // Monday start
+    const startPad = (firstDay.getDay() + 6) % 7;
     const days = [];
 
-    // Padding for days before month start
     for (let i = 0; i < startPad; i++) {
       days.push(null);
     }
 
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const dayLog = logs[dateStr];
+      const dayData = monthData[dateStr];
       let status = null;
       let balance = null;
 
-      if (dayLog && (dayLog.totalIn > 0 || dayLog.totalOut > 0)) {
-        balance = getDayBalance(dayLog, profile.basalMetabolism);
+      if (dayData && (dayData.totalIn > 0 || dayData.totalOut > 0)) {
+        const totalOut = dayData.totalOut + profile.basalMetabolism;
+        const deficit = totalOut - dayData.totalIn;
+        balance = { totalIn: dayData.totalIn, totalOut, deficit, kgFat: kcalToKgFat(deficit) };
         if (target) {
-          status = getDayStatus(balance.deficit, target.dailyDeficit);
+          status = getDayStatus(deficit, target.dailyDeficit);
         }
       }
 
-      days.push({ day: d, dateStr, status, balance, hasData: !!dayLog });
+      days.push({ day: d, dateStr, status, balance, hasData: !!dayData });
     }
 
     return days;
-  }, [currentMonth, logs, profile, target]);
+  }, [currentMonth, monthData, profile, target]);
 
   const monthNames = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -60,31 +108,6 @@ export default function Calendar({ profile, onViewDay }) {
       return { ...prev, month: prev.month + 1 };
     });
   };
-
-  // Weekly summary
-  const weekSummary = useMemo(() => {
-    const today = new Date();
-    const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - dayOfWeek);
-
-    let totalDeficit = 0;
-    let daysWithData = 0;
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const dateStr = formatDate(d);
-      const dayLog = logs[dateStr];
-      if (dayLog && (dayLog.totalIn > 0 || dayLog.totalOut > 0)) {
-        const balance = getDayBalance(dayLog, profile.basalMetabolism);
-        totalDeficit += balance.deficit;
-        daysWithData++;
-      }
-    }
-
-    return { totalDeficit, daysWithData, kgFat: kcalToKgFat(totalDeficit) };
-  }, [logs, profile]);
 
   const todayStr = formatDate(new Date());
   const statusColors = { green: '#4ade80', yellow: '#facc15', red: '#f87171' };
@@ -118,30 +141,36 @@ export default function Calendar({ profile, onViewDay }) {
       </div>
 
       {/* Calendar grid */}
-      <div className="calendar-grid">
-        {['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'].map((d) => (
-          <div key={d} className="cal-header">{d}</div>
-        ))}
-        {daysInMonth.map((item, i) => (
-          <div
-            key={i}
-            className={`cal-day ${!item ? 'empty' : ''} ${item?.dateStr === todayStr ? 'today' : ''} ${item?.hasData ? 'has-data' : ''}`}
-            onClick={() => item?.hasData && onViewDay(item.dateStr)}
-          >
-            {item && (
-              <>
-                <span className="day-num">{item.day}</span>
-                {item.status && (
-                  <span
-                    className="day-dot"
-                    style={{ backgroundColor: statusColors[item.status] }}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        ))}
-      </div>
+      {loadingMonth ? (
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <div className="spinner" />
+        </div>
+      ) : (
+        <div className="calendar-grid">
+          {['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'].map((d) => (
+            <div key={d} className="cal-header">{d}</div>
+          ))}
+          {daysInMonth.map((item, i) => (
+            <div
+              key={i}
+              className={`cal-day ${!item ? 'empty' : ''} ${item?.dateStr === todayStr ? 'today' : ''} ${item?.hasData ? 'has-data' : ''}`}
+              onClick={() => item?.hasData && onViewDay(item.dateStr)}
+            >
+              {item && (
+                <>
+                  <span className="day-num">{item.day}</span>
+                  {item.status && (
+                    <span
+                      className="day-dot"
+                      style={{ backgroundColor: statusColors[item.status] }}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

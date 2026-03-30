@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getUserProfile } from './utils/storage';
+import { getProfile } from './utils/db';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
 import Calendar from './pages/Calendar';
@@ -18,15 +18,25 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [activeTab, setActiveTab] = useState(TABS.DASHBOARD);
   const [selectedDate, setSelectedDate] = useState(null);
-  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const saved = getUserProfile();
-    if (saved) setProfile(saved);
-    setLoaded(true);
+    getProfile()
+      .then((p) => {
+        if (p) setProfile(p);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  if (!loaded) return null;
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner" />
+        <p>Chargement...</p>
+      </div>
+    );
+  }
 
   if (!profile) {
     return <Setup onComplete={(p) => setProfile(p)} />;
@@ -56,7 +66,11 @@ function App() {
           <Calendar profile={profile} onViewDay={handleViewDay} />
         )}
         {activeTab === TABS.DAY_DETAIL && selectedDate && (
-          <DayDetail profile={profile} dateStr={selectedDate} onBack={handleBackFromDay} />
+          <DayDetail
+            profile={profile}
+            dateStr={selectedDate}
+            onBack={handleBackFromDay}
+          />
         )}
         {activeTab === TABS.SETTINGS && (
           <Settings

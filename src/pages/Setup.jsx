@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { saveUserProfile, saveSettings } from '../utils/storage';
+import { createProfile } from '../utils/db';
 
-const STEPS = ['name', 'metabolism', 'goal'];
+const STEPS = ['name', 'metabolism', 'goal', 'occasion'];
 
 export default function Setup({ onComplete }) {
   const [step, setStep] = useState(0);
@@ -9,22 +9,31 @@ export default function Setup({ onComplete }) {
   const [basalMetabolism, setBasalMetabolism] = useState('');
   const [targetWeightLoss, setTargetWeightLoss] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [occasion, setOccasion] = useState('');
   const [apiKey, setApiKey] = useState(import.meta.env.VITE_OPENAI_API_KEY || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < STEPS.length - 1) {
       setStep(step + 1);
     } else {
-      const profile = {
-        firstName,
-        basalMetabolism: parseInt(basalMetabolism, 10),
-        targetWeightLoss: parseFloat(targetWeightLoss),
-        targetDate,
-        apiKey,
-        createdAt: new Date().toISOString(),
-      };
-      saveUserProfile(profile);
-      onComplete(profile);
+      setSaving(true);
+      setError(null);
+      try {
+        const profile = await createProfile({
+          firstName,
+          basalMetabolism: parseInt(basalMetabolism, 10),
+          targetWeightLoss: parseFloat(targetWeightLoss),
+          targetDate,
+          apiKey,
+          occasion,
+        });
+        onComplete(profile);
+      } catch (err) {
+        setError(err.message);
+        setSaving(false);
+      }
     }
   };
 
@@ -32,6 +41,7 @@ export default function Setup({ onComplete }) {
     if (step === 0) return firstName.trim().length > 0;
     if (step === 1) return basalMetabolism > 0 && apiKey.trim().length > 0;
     if (step === 2) return targetWeightLoss > 0 && targetDate;
+    if (step === 3) return true; // occasion is optional
     return false;
   };
 
@@ -76,7 +86,7 @@ export default function Setup({ onComplete }) {
             />
             <p style={{ marginTop: '1.5rem' }}>Ta clé API OpenAI</p>
             <p className="hint">
-              Elle sera stockée localement et utilisée pour estimer les calories.
+              Elle sera stockée et utilisée pour estimer les calories via l'IA.
             </p>
             <input
               type="password"
@@ -110,6 +120,29 @@ export default function Setup({ onComplete }) {
           </div>
         )}
 
+        {step === 3 && (
+          <div className="setup-step">
+            <h2>Motivation</h2>
+            <p>Tu fais ça pour une occasion spéciale ?</p>
+            <p className="hint">
+              Mariage, vacances, compétition, santé... On adaptera les messages de motivation !
+            </p>
+            <input
+              type="text"
+              placeholder="Ex: Mon mariage en juillet (optionnel)"
+              value={occasion}
+              onChange={(e) => setOccasion(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && canNext() && handleNext()}
+            />
+          </div>
+        )}
+
+        {error && (
+          <p style={{ color: 'var(--red)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+            {error}
+          </p>
+        )}
+
         <div className="setup-actions">
           {step > 0 && (
             <button className="btn-secondary" onClick={() => setStep(step - 1)}>
@@ -119,9 +152,9 @@ export default function Setup({ onComplete }) {
           <button
             className="btn-primary"
             onClick={handleNext}
-            disabled={!canNext()}
+            disabled={!canNext() || saving}
           >
-            {step === STEPS.length - 1 ? 'Commencer !' : 'Suivant'}
+            {saving ? 'Sauvegarde...' : step === STEPS.length - 1 ? 'Commencer !' : 'Suivant'}
           </button>
         </div>
       </div>

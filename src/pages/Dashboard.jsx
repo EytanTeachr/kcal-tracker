@@ -1,66 +1,74 @@
 import { useState, useEffect, useRef } from 'react';
-import { getDayLog, saveDayLog } from '../utils/storage';
+import { getEntriesForDate, addEntry, addMultipleEntries, updateEntry, deleteEntry } from '../utils/db';
 import { getDailyTarget, getDayBalance, getDayStatus, kcalToKgFat, formatDate, formatDateFR } from '../utils/kcal';
-import { chatWithAI } from '../utils/ai';
+import { chatWithAI, getMotivationMessage } from '../utils/ai';
 import BarcodeScanner from '../components/BarcodeScanner';
 
 export default function Dashboard({ profile }) {
   const today = formatDate(new Date());
-  const [dayLog, setDayLog] = useState(getDayLog(today));
-  const [chatMode, setChatMode] = useState(null); // 'meal', 'activity', or 'barcode'
-  const [messages, setMessages] = useState([]); // displayed messages
-  const [apiHistory, setApiHistory] = useState([]); // full API conversation history
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [dayLog, setDayLog] = useState({ meals: [], activities: [], totalIn: 0, totalOut: 0 });
+  const [chatMode, setChatMode] = useState(null); // 'meal', 'activity', 'barcode', 'photo'
+  const [messages, setMessages] = useState([]);
+  const [apiHistory, setApiHistory] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [pendingItems, setPendingItems] = useState(null); // items waiting to be added
+  const [dataLoading, setDataLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [editKcal, setEditKcal] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [motivation, setMotivation] = useState('');
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const target = getDailyTarget(profile);
   const balance = getDayBalance(dayLog, profile.basalMetabolism);
   const status = target ? getDayStatus(balance.deficit, target.dailyDeficit) : 'green';
 
+  // Load entries for selected date
+  useEffect(() => {
+    let cancelled = false;
+    setDataLoading(true);
+    getEntriesForDate(profile.id, selectedDate)
+      .then((data) => {
+        if (!cancelled) setDayLog(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setDataLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [profile.id, selectedDate]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const recalcTotals = (log) => {
-    log.totalIn = (log.meals || []).reduce((sum, m) => sum + m.kcal, 0);
-    log.totalOut = (log.activities || []).reduce((sum, a) => sum + a.kcal, 0);
-    return log;
-  };
+  // Load motivation message
+  useEffect(() => {
+    if (!target || !profile.apiKey || selectedDate !== today) return;
+    const deficit = balance.deficit;
+    getMotivationMessage(profile.apiKey, profile, deficit, target.dailyDeficit)
+      .then((msg) => { if (msg) setMotivation(msg); })
+      .catch(() => {});
+  }, [dayLog]);
+
+  // Date navigation - show yesterday/today buttons
+  const yesterday = formatDate(new Date(Date.now() - 86400000));
+  const isToday = selectedDate === today;
+  const isYesterday = selectedDate === yesterday;
 
   const closeChat = () => {
     setChatMode(null);
     setMessages([]);
     setApiHistory([]);
-    setPendingItems(null);
   };
 
-  const addItemsToLog = (items, detail) => {
-    const updatedLog = { ...dayLog };
-    const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-
-    for (const item of items) {
-      const entry = {
-        description: item.description,
-        kcal: item.kcal,
-        detail: detail || '',
-        time,
-      };
-
-      if (chatMode === 'meal') {
-        updatedLog.meals = [...(updatedLog.meals || []), entry];
-      } else {
-        updatedLog.activities = [...(updatedLog.activities || []), entry];
-      }
-    }
-
-    recalcTotals(updatedLog);
-    saveDayLog(today, updatedLog);
-    setDayLog(updatedLog);
+  const reloadEntries = async () => {
+    try {
+      const data = await getEntriesForDate(profile.id, selectedDate);
+      setDayLog(data);
+    } catch {}
   };
 
   const handleSend = async () => {
@@ -69,10 +77,8 @@ export default function Dashboard({ profile }) {
     const userMsg = input.trim();
     setInput('');
 
-    // Add to displayed messages
     setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
 
-    // Add to API history
     const newHistory = [...apiHistory, { role: 'user', content: userMsg }];
     setApiHistory(newHistory);
     setLoading(true);
@@ -81,32 +87,36 @@ export default function Dashboard({ profile }) {
       const result = await chatWithAI(profile.apiKey, newHistory, chatMode);
 
       if (result.type === 'final') {
-        // AI confirmed with final result - add items to log
         const emoji = chatMode === 'meal' ? '🍽️' : '🏃';
         const summary = result.items
-          .map((it) => `${emoji} **${it.description}** — ${it.kcal} kcal`)
+          .map((it) => `${emoji} ${it.description} — ${it.kcal} kcal`)
           .join('\n');
-        const displayMsg = summary + (result.detail ? `\n${result.detail}` : '');
 
-        setMessages((prev) => [...prev, { role: 'assistant', content: displayMsg }]);
+        setMessages((prev) => [...prev, { role: 'assistant', content: summary }]);
 
-        // Add to API history
         const assistantContent = result.displayText || summary;
         setApiHistory((prev) => [...prev, { role: 'assistant', content: assistantContent }]);
 
-        // Add items to the day log
-        addItemsToLog(result.items, result.detail);
-        setPendingItems(result.items);
+        // Add items to Supabase
+        const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        const entries = result.items.map((item) => ({
+          description: item.description,
+          kcal: item.kcal,
+          detail: result.detail || '',
+          time,
+        }));
 
-        // Show confirmation message
+        const type = chatMode === 'meal' ? 'meal' : 'activity';
+        await addMultipleEntries(profile.id, selectedDate, type, entries);
+        await reloadEntries();
+
         setTimeout(() => {
           setMessages((prev) => [
             ...prev,
-            { role: 'system', content: `Ajouté ! Tu peux continuer à ajouter ou fermer le chat.` },
+            { role: 'system', content: 'Ajouté ! Tu peux continuer ou fermer le chat.' },
           ]);
         }, 500);
       } else {
-        // Regular conversational message
         setMessages((prev) => [...prev, { role: 'assistant', content: result.content }]);
         setApiHistory((prev) => [...prev, { role: 'assistant', content: result.content }]);
       }
@@ -120,53 +130,84 @@ export default function Dashboard({ profile }) {
     }
   };
 
-  const handleBarcodeAdd = (item) => {
-    const updatedLog = { ...dayLog };
-    updatedLog.meals = [...(updatedLog.meals || []), item];
-    updatedLog.totalIn = (updatedLog.totalIn || 0) + item.kcal;
-    saveDayLog(today, updatedLog);
-    setDayLog(updatedLog);
+  const handlePhotoCapture = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result.split(',')[1];
+      const imageUrl = `data:${file.type};base64,${base64}`;
+
+      // Start photo chat mode
+      setChatMode('photo');
+      setMessages([{ role: 'assistant', content: 'Je regarde ta photo...' }]);
+
+      const photoMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: "Voici la photo de ce que j'ai mangé. Identifie les aliments et estime les calories." },
+          { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+        ],
+      };
+
+      setApiHistory([photoMessage]);
+      setLoading(true);
+
+      try {
+        const result = await chatWithAI(profile.apiKey, [photoMessage], 'photo');
+
+        if (result.type === 'final') {
+          const summary = result.items.map((it) => `🍽️ ${it.description} — ${it.kcal} kcal`).join('\n');
+          setMessages([{ role: 'assistant', content: summary }]);
+          const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+          const entries = result.items.map((item) => ({ description: item.description, kcal: item.kcal, detail: result.detail || '', time }));
+          await addMultipleEntries(profile.id, selectedDate, 'meal', entries);
+          await reloadEntries();
+          setTimeout(() => {
+            setMessages((prev) => [...prev, { role: 'system', content: 'Ajouté !' }]);
+          }, 500);
+        } else {
+          setMessages([{ role: 'assistant', content: result.content }]);
+          setApiHistory((prev) => [...prev, { role: 'assistant', content: result.content }]);
+        }
+      } catch (err) {
+        setMessages([{ role: 'assistant', content: `Erreur : ${err.message}` }]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleBarcodeAdd = async (item) => {
+    await addEntry(profile.id, selectedDate, 'meal', item);
+    await reloadEntries();
   };
 
   const handleStartEdit = (type, index) => {
     const item = type === 'meal' ? dayLog.meals[index] : dayLog.activities[index];
-    setEditing({ type, index });
+    setEditing({ type, index, id: item.id });
     setEditKcal(String(item.kcal));
     setEditDesc(item.description);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editing) return;
-    const updatedLog = { ...dayLog };
-    const list = editing.type === 'meal' ? [...(updatedLog.meals || [])] : [...(updatedLog.activities || [])];
-    list[editing.index] = {
-      ...list[editing.index],
+    await updateEntry(editing.id, {
       kcal: parseInt(editKcal, 10) || 0,
       description: editDesc,
-    };
-    if (editing.type === 'meal') {
-      updatedLog.meals = list;
-    } else {
-      updatedLog.activities = list;
-    }
-    recalcTotals(updatedLog);
-    saveDayLog(today, updatedLog);
-    setDayLog(updatedLog);
+    });
+    await reloadEntries();
     setEditing(null);
   };
 
-  const handleDelete = (type, index) => {
-    const updatedLog = { ...dayLog };
-    if (type === 'meal') {
-      updatedLog.meals = [...(updatedLog.meals || [])];
-      updatedLog.meals.splice(index, 1);
-    } else {
-      updatedLog.activities = [...(updatedLog.activities || [])];
-      updatedLog.activities.splice(index, 1);
-    }
-    recalcTotals(updatedLog);
-    saveDayLog(today, updatedLog);
-    setDayLog(updatedLog);
+  const handleDelete = async (type, index) => {
+    const item = type === 'meal' ? dayLog.meals[index] : dayLog.activities[index];
+    await deleteEntry(item.id);
+    await reloadEntries();
     setEditing(null);
   };
 
@@ -175,198 +216,263 @@ export default function Dashboard({ profile }) {
   const isEditing = (type, index) =>
     editing && editing.type === type && editing.index === index;
 
+  // Color for deficit based on progress toward target
+  const getDeficitColor = () => {
+    if (!target) return statusColor.green;
+    return statusColor[status];
+  };
+
   return (
     <div className="dashboard">
-      <div className="date-header">{formatDateFR(today)}</div>
-
-      {/* Summary cards */}
-      <div className="summary-cards">
-        <div className="summary-card">
-          <div className="card-label">Consommé</div>
-          <div className="card-value">{balance.totalIn} <small>kcal</small></div>
-        </div>
-        <div className="summary-card">
-          <div className="card-label">Dépensé</div>
-          <div className="card-value">{balance.totalOut} <small>kcal</small></div>
-        </div>
-        <div className="summary-card highlight" style={{ borderColor: statusColor[status] }}>
-          <div className="card-label">Déficit</div>
-          <div className="card-value" style={{ color: statusColor[status] }}>
-            {balance.deficit > 0 ? '+' : ''}{balance.deficit} <small>kcal</small>
-          </div>
-          <div className="card-sub">
-            {balance.kgFat > 0 ? '−' : '+'}{Math.abs(balance.kgFat)} kg de gras
-          </div>
-        </div>
-      </div>
-
-      {/* Target info */}
-      {target && (
-        <div className="target-info">
-          <div className="target-row">
-            <span>Objectif journalier :</span>
-            <strong>−{target.dailyDeficit} kcal</strong>
-            <small>(−{target.dailyKgFat} kg/jour)</small>
-          </div>
-          <div className="target-row">
-            <span>Jours restants :</span>
-            <strong>{target.daysRemaining}</strong>
-          </div>
-          <div className="progress-bar-container">
-            <div
-              className="progress-bar"
-              style={{
-                width: `${Math.min(100, (balance.deficit / target.dailyDeficit) * 100)}%`,
-                backgroundColor: statusColor[status],
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Entries list */}
-      <div className="entries-section">
-        {dayLog.meals?.length > 0 && (
-          <div className="entries-group">
-            <h3>🍽️ Repas</h3>
-            {dayLog.meals.map((m, i) =>
-              isEditing('meal', i) ? (
-                <div key={i} className="entry-edit">
-                  <input
-                    type="text"
-                    value={editDesc}
-                    onChange={(e) => setEditDesc(e.target.value)}
-                    className="edit-desc"
-                  />
-                  <div className="edit-kcal-row">
-                    <input
-                      type="number"
-                      value={editKcal}
-                      onChange={(e) => setEditKcal(e.target.value)}
-                      className="edit-kcal"
-                    />
-                    <span>kcal</span>
-                  </div>
-                  <div className="edit-actions">
-                    <button className="btn-save" onClick={handleSaveEdit}>Sauver</button>
-                    <button className="btn-cancel" onClick={() => setEditing(null)}>Annuler</button>
-                    <button className="btn-delete" onClick={() => handleDelete('meal', i)}>Supprimer</button>
-                  </div>
-                </div>
-              ) : (
-                <div key={i} className="entry-item clickable" onClick={() => handleStartEdit('meal', i)}>
-                  <span className="entry-time">{m.time}</span>
-                  <span className="entry-desc">{m.description}</span>
-                  <span className="entry-kcal">+{m.kcal} kcal</span>
-                  <span className="entry-edit-icon">✏️</span>
-                </div>
-              )
-            )}
-          </div>
-        )}
-        {dayLog.activities?.length > 0 && (
-          <div className="entries-group">
-            <h3>🏃 Activités</h3>
-            {dayLog.activities.map((a, i) =>
-              isEditing('activity', i) ? (
-                <div key={i} className="entry-edit">
-                  <input
-                    type="text"
-                    value={editDesc}
-                    onChange={(e) => setEditDesc(e.target.value)}
-                    className="edit-desc"
-                  />
-                  <div className="edit-kcal-row">
-                    <input
-                      type="number"
-                      value={editKcal}
-                      onChange={(e) => setEditKcal(e.target.value)}
-                      className="edit-kcal"
-                    />
-                    <span>kcal</span>
-                  </div>
-                  <div className="edit-actions">
-                    <button className="btn-save" onClick={handleSaveEdit}>Sauver</button>
-                    <button className="btn-cancel" onClick={() => setEditing(null)}>Annuler</button>
-                    <button className="btn-delete" onClick={() => handleDelete('activity', i)}>Supprimer</button>
-                  </div>
-                </div>
-              ) : (
-                <div key={i} className="entry-item clickable" onClick={() => handleStartEdit('activity', i)}>
-                  <span className="entry-time">{a.time}</span>
-                  <span className="entry-desc">{a.description}</span>
-                  <span className="entry-kcal">−{a.kcal} kcal</span>
-                  <span className="entry-edit-icon">✏️</span>
-                </div>
-              )
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Barcode scanner */}
-      {chatMode === 'barcode' && (
-        <BarcodeScanner
-          onAdd={(item) => {
-            handleBarcodeAdd(item);
-          }}
-          onClose={() => setChatMode(null)}
+      {/* Date selector */}
+      <div className="date-selector">
+        <button
+          className={`date-tab ${isYesterday ? 'active' : ''}`}
+          onClick={() => setSelectedDate(yesterday)}
+        >
+          Hier
+        </button>
+        <button
+          className={`date-tab ${isToday ? 'active' : ''}`}
+          onClick={() => setSelectedDate(today)}
+        >
+          Aujourd'hui
+        </button>
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          max={today}
+          className="date-picker-input"
         />
-      )}
+      </div>
 
-      {/* Chat area */}
-      {chatMode && chatMode !== 'barcode' ? (
-        <div className="chat-area">
-          <div className="chat-header">
-            <button className="btn-back" onClick={closeChat}>
-              ← Retour
-            </button>
-            <span>{chatMode === 'meal' ? '🍽️ Ajouter un repas' : '🏃 Ajouter une activité'}</span>
-          </div>
-          <div className="chat-messages">
-            <div className="message assistant">
-              {chatMode === 'meal'
-                ? 'Dis-moi ce que tu as mangé ! Je vais te poser des questions si besoin pour estimer au mieux les calories.'
-                : 'Dis-moi quelle activité tu as faite ! Je vais te poser des questions si besoin pour estimer les calories brûlées.'}
+      <div className="date-header">{formatDateFR(selectedDate)}</div>
+
+      {dataLoading ? (
+        <div className="loading-screen" style={{ padding: '2rem' }}>
+          <div className="spinner" />
+        </div>
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="summary-cards">
+            <div className="summary-card">
+              <div className="card-label">Consommé</div>
+              <div className="card-value">{balance.totalIn} <small>kcal</small></div>
             </div>
-            {messages.map((msg, i) => (
-              <div key={i} className={`message ${msg.role}`}>
-                {msg.content}
+            <div className="summary-card">
+              <div className="card-label">Dépensé</div>
+              <div className="card-value">{balance.totalOut} <small>kcal</small></div>
+            </div>
+            <div className="summary-card highlight" style={{ borderColor: getDeficitColor() }}>
+              <div className="card-label">Déficit</div>
+              <div className="card-value" style={{ color: getDeficitColor() }}>
+                {balance.deficit > 0 ? '+' : ''}{balance.deficit} <small>kcal</small>
               </div>
-            ))}
-            {loading && (
-              <div className="message assistant loading">
-                <span className="dots">...</span>
+              <div className="card-sub">
+                {balance.kgFat > 0 ? '−' : '+'}{Math.abs(balance.kgFat)} kg de gras
+              </div>
+              {target && (
+                <div className="card-target" style={{ color: getDeficitColor() }}>
+                  Objectif : −{target.dailyDeficit} kcal
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Target progress bar */}
+          {target && (
+            <div className="target-info">
+              <div className="target-row">
+                <span>Progression du jour</span>
+                <strong style={{ color: getDeficitColor() }}>
+                  {balance.deficit}/{target.dailyDeficit} kcal
+                </strong>
+              </div>
+              <div className="progress-bar-container">
+                <div
+                  className="progress-bar"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, (balance.deficit / target.dailyDeficit) * 100))}%`,
+                    backgroundColor: getDeficitColor(),
+                  }}
+                />
+              </div>
+              <div className="target-row" style={{ marginTop: '0.5rem' }}>
+                <span>Jours restants :</span>
+                <strong>{target.daysRemaining}</strong>
+              </div>
+            </div>
+          )}
+
+          {/* Entries list */}
+          <div className="entries-section">
+            {dayLog.meals?.length > 0 && (
+              <div className="entries-group">
+                <h3>🍽️ Repas</h3>
+                {dayLog.meals.map((m, i) =>
+                  isEditing('meal', i) ? (
+                    <div key={m.id || i} className="entry-edit">
+                      <input
+                        type="text"
+                        value={editDesc}
+                        onChange={(e) => setEditDesc(e.target.value)}
+                        className="edit-desc"
+                      />
+                      <div className="edit-kcal-row">
+                        <input
+                          type="number"
+                          value={editKcal}
+                          onChange={(e) => setEditKcal(e.target.value)}
+                          className="edit-kcal"
+                        />
+                        <span>kcal</span>
+                      </div>
+                      <div className="edit-actions">
+                        <button className="btn-save" onClick={handleSaveEdit}>Sauver</button>
+                        <button className="btn-cancel" onClick={() => setEditing(null)}>Annuler</button>
+                        <button className="btn-delete" onClick={() => handleDelete('meal', i)}>Supprimer</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={m.id || i} className="entry-item clickable" onClick={() => handleStartEdit('meal', i)}>
+                      <span className="entry-time">{m.time}</span>
+                      <span className="entry-desc">{m.description}</span>
+                      <span className="entry-kcal">+{m.kcal} kcal</span>
+                      <span className="entry-edit-icon">✏️</span>
+                    </div>
+                  )
+                )}
               </div>
             )}
-            <div ref={messagesEndRef} />
+            {dayLog.activities?.length > 0 && (
+              <div className="entries-group">
+                <h3>🏃 Activités</h3>
+                {dayLog.activities.map((a, i) =>
+                  isEditing('activity', i) ? (
+                    <div key={a.id || i} className="entry-edit">
+                      <input
+                        type="text"
+                        value={editDesc}
+                        onChange={(e) => setEditDesc(e.target.value)}
+                        className="edit-desc"
+                      />
+                      <div className="edit-kcal-row">
+                        <input
+                          type="number"
+                          value={editKcal}
+                          onChange={(e) => setEditKcal(e.target.value)}
+                          className="edit-kcal"
+                        />
+                        <span>kcal</span>
+                      </div>
+                      <div className="edit-actions">
+                        <button className="btn-save" onClick={handleSaveEdit}>Sauver</button>
+                        <button className="btn-cancel" onClick={() => setEditing(null)}>Annuler</button>
+                        <button className="btn-delete" onClick={() => handleDelete('activity', i)}>Supprimer</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={a.id || i} className="entry-item clickable" onClick={() => handleStartEdit('activity', i)}>
+                      <span className="entry-time">{a.time}</span>
+                      <span className="entry-desc">{a.description}</span>
+                      <span className="entry-kcal">−{a.kcal} kcal</span>
+                      <span className="entry-edit-icon">✏️</span>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
           </div>
-          <div className="chat-input-row">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder={chatMode === 'meal' ? 'Décris ton repas...' : 'Décris ton activité...'}
-              autoFocus
+
+          {/* Barcode scanner */}
+          {chatMode === 'barcode' && (
+            <BarcodeScanner
+              onAdd={handleBarcodeAdd}
+              onClose={() => setChatMode(null)}
             />
-            <button className="btn-send" onClick={handleSend} disabled={loading || !input.trim()}>
-              ➤
-            </button>
-          </div>
-        </div>
-      ) : chatMode !== 'barcode' && (
-        <div className="add-buttons-grid">
-          <button className="btn-add meal" onClick={() => setChatMode('meal')}>
-            🍽️ Ajouter un repas
-          </button>
-          <button className="btn-add activity" onClick={() => setChatMode('activity')}>
-            🏃 Ajouter une activité
-          </button>
-          <button className="btn-add barcode" onClick={() => setChatMode('barcode')}>
-            📷 Scanner un code-barres
-          </button>
-        </div>
+          )}
+
+          {/* Hidden file input for photo */}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handlePhotoCapture}
+          />
+
+          {/* Motivation message */}
+          {motivation && selectedDate === today && (
+            <div className="motivation-banner">
+              {motivation}
+            </div>
+          )}
+
+          {/* Chat area */}
+          {chatMode && chatMode !== 'barcode' ? (
+            <div className="chat-area">
+              <div className="chat-header">
+                <button className="btn-back" onClick={closeChat}>
+                  ← Retour
+                </button>
+                <span>
+                  {chatMode === 'meal' ? '🍽️ Ajouter un repas' : chatMode === 'photo' ? '📸 Photo du plat' : '🏃 Ajouter une activité'}
+                </span>
+              </div>
+              <div className="chat-messages">
+                <div className="message assistant">
+                  {chatMode === 'meal'
+                    ? 'Dis-moi ce que tu as mangé ! Je vais te poser des questions si besoin pour estimer au mieux les calories.'
+                    : 'Dis-moi quelle activité tu as faite ! Je vais te poser des questions si besoin pour estimer les calories brûlées.'}
+                </div>
+                {messages.map((msg, i) => (
+                  <div key={i} className={`message ${msg.role}`}>
+                    {msg.content}
+                  </div>
+                ))}
+                {loading && (
+                  <div className="message assistant loading">
+                    <span className="dots">...</span>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+              <div className="chat-input-row">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  placeholder={chatMode === 'meal' ? 'Décris ton repas...' : 'Décris ton activité...'}
+                  autoFocus
+                />
+                <button className="btn-send" onClick={handleSend} disabled={loading || !input.trim()}>
+                  ➤
+                </button>
+              </div>
+            </div>
+          ) : chatMode !== 'barcode' && (
+            <div className="add-buttons-container">
+              <div className="add-buttons-grid">
+                <button className="btn-add meal" onClick={() => setChatMode('meal')}>
+                  🍽️ Ajouter un repas
+                </button>
+                <button className="btn-add activity" onClick={() => setChatMode('activity')}>
+                  🏃 Ajouter une activité
+                </button>
+                <button className="btn-add photo" onClick={() => fileInputRef.current?.click()}>
+                  📸 Photo du plat
+                </button>
+                <button className="btn-add barcode" onClick={() => setChatMode('barcode')}>
+                  📷 Scanner un code-barres
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

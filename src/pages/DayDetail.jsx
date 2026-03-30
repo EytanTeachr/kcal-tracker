@@ -1,11 +1,22 @@
-import { getDayLog } from '../utils/storage';
+import { useState, useEffect } from 'react';
+import { getEntriesForDate } from '../utils/db';
 import { getDailyTarget, getDayBalance, getDayStatus, formatDateFR } from '../utils/kcal';
 
 export default function DayDetail({ profile, dateStr, onBack }) {
-  const dayLog = getDayLog(dateStr);
+  const [dayLog, setDayLog] = useState({ meals: [], activities: [], totalIn: 0, totalOut: 0 });
+  const [loading, setLoading] = useState(true);
+
   const target = getDailyTarget(profile);
   const balance = getDayBalance(dayLog, profile.basalMetabolism);
   const status = target ? getDayStatus(balance.deficit, target.dailyDeficit) : 'green';
+
+  useEffect(() => {
+    setLoading(true);
+    getEntriesForDate(profile.id, dateStr)
+      .then(setDayLog)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [profile.id, dateStr]);
 
   const statusColors = { green: '#4ade80', yellow: '#facc15', red: '#f87171' };
   const statusLabels = {
@@ -13,6 +24,17 @@ export default function DayDetail({ profile, dateStr, onBack }) {
     yellow: 'Objectif atteint',
     red: 'Objectif non atteint',
   };
+
+  if (loading) {
+    return (
+      <div className="day-detail">
+        <button className="btn-back" onClick={onBack}>← Retour au calendrier</button>
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <div className="spinner" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="day-detail">
@@ -48,7 +70,7 @@ export default function DayDetail({ profile, dateStr, onBack }) {
         <div className="target-info">
           <div className="target-row">
             <span>Objectif du jour :</span>
-            <strong>−{target.dailyDeficit} kcal</strong>
+            <strong style={{ color: statusColors[status] }}>−{target.dailyDeficit} kcal</strong>
           </div>
         </div>
       )}
@@ -58,7 +80,7 @@ export default function DayDetail({ profile, dateStr, onBack }) {
           <div className="entries-group">
             <h3>🍽️ Repas</h3>
             {dayLog.meals.map((m, i) => (
-              <div key={i} className="entry-item">
+              <div key={m.id || i} className="entry-item">
                 <span className="entry-time">{m.time}</span>
                 <span className="entry-desc">{m.description}</span>
                 <span className="entry-kcal">+{m.kcal} kcal</span>
@@ -73,7 +95,7 @@ export default function DayDetail({ profile, dateStr, onBack }) {
           <div className="entries-group">
             <h3>🏃 Activités</h3>
             {dayLog.activities.map((a, i) => (
-              <div key={i} className="entry-item">
+              <div key={a.id || i} className="entry-item">
                 <span className="entry-time">{a.time}</span>
                 <span className="entry-desc">{a.description}</span>
                 <span className="entry-kcal">−{a.kcal} kcal</span>

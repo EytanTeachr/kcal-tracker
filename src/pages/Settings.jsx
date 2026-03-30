@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { saveUserProfile, clearAllData } from '../utils/storage';
+import { updateProfile, deleteAllData } from '../utils/db';
 
 export default function Settings({ profile, onUpdate }) {
   const [firstName, setFirstName] = useState(profile.firstName);
@@ -8,25 +8,33 @@ export default function Settings({ profile, onUpdate }) {
   const [targetDate, setTargetDate] = useState(profile.targetDate);
   const [apiKey, setApiKey] = useState(profile.apiKey || '');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
 
-  const handleSave = () => {
-    const updated = {
-      ...profile,
-      firstName,
-      basalMetabolism: parseInt(basalMetabolism, 10),
-      targetWeightLoss: parseFloat(targetWeightLoss),
-      targetDate,
-      apiKey,
-    };
-    saveUserProfile(updated);
-    onUpdate(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updated = {
+        ...profile,
+        firstName,
+        basalMetabolism: parseInt(basalMetabolism, 10),
+        targetWeightLoss: parseFloat(targetWeightLoss),
+        targetDate,
+        apiKey,
+      };
+      await updateProfile(updated);
+      onUpdate(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      alert('Erreur: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleReset = () => {
-    clearAllData();
+  const handleReset = async () => {
+    await deleteAllData();
     window.location.reload();
   };
 
@@ -82,8 +90,8 @@ export default function Settings({ profile, onUpdate }) {
           />
         </div>
 
-        <button className="btn-primary" onClick={handleSave}>
-          {saved ? '✓ Sauvegardé !' : 'Sauvegarder'}
+        <button className="btn-primary" onClick={handleSave} disabled={saving}>
+          {saved ? '✓ Sauvegardé !' : saving ? 'Sauvegarde...' : 'Sauvegarder'}
         </button>
 
         <div className="danger-zone">
