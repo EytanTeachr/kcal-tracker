@@ -139,6 +139,20 @@ create policy "Users send encouragements" on encouragements for insert with chec
 );
 
 -- ============================================
+-- Allow viewing profiles of users linked by friendships (pending or accepted)
+-- ============================================
+create policy "Users can view friend profiles" on profiles
+  for select using (
+    id in (
+      select requester_id from friendships
+      where addressee_id in (select id from profiles p2 where p2.user_id = auth.uid())
+      union
+      select addressee_id from friendships
+      where requester_id in (select id from profiles p2 where p2.user_id = auth.uid())
+    )
+  );
+
+-- ============================================
 -- RPC FUNCTION: Find friend by email + PIN (bypasses RLS)
 -- ============================================
 create or replace function find_friend_by_email_and_pin(search_email text, search_pin text)
