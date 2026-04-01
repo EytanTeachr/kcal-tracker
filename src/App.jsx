@@ -6,12 +6,14 @@ import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
 import Calendar from './pages/Calendar';
 import Settings from './pages/Settings';
+import Friends from './pages/Friends';
 import DayDetail from './pages/DayDetail';
 import './index.css';
 
 const TABS = {
   DASHBOARD: 'dashboard',
   CALENDAR: 'calendar',
+  FRIENDS: 'friends',
   SETTINGS: 'settings',
   DAY_DETAIL: 'day_detail',
 };
@@ -127,6 +129,9 @@ function App() {
             onBack={handleBackFromDay}
           />
         )}
+        {activeTab === TABS.FRIENDS && (
+          <Friends profile={profile} />
+        )}
         {activeTab === TABS.SETTINGS && (
           <Settings
             profile={profile}
@@ -150,6 +155,13 @@ function App() {
         >
           <span className="nav-icon">📅</span>
           <span>Historique</span>
+        </button>
+        <button
+          className={activeTab === TABS.FRIENDS ? 'active' : ''}
+          onClick={() => setActiveTab(TABS.FRIENDS)}
+        >
+          <span className="nav-icon">👥</span>
+          <span>Amis</span>
         </button>
         <button
           className={activeTab === TABS.SETTINGS ? 'active' : ''}

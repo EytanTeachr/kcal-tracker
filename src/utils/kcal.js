@@ -52,6 +52,46 @@ export function getDayBalance(dayLog, basalMetabolism) {
   };
 }
 
+// Adaptive daily target based on historical performance
+export function getAdaptiveDailyTarget(profile, historicalDayLogs) {
+  const naive = getDailyTarget(profile);
+  if (!naive) return null;
+
+  const totalKcalToLose = naive.totalKcalToLose;
+  const daysRemaining = naive.daysRemaining;
+
+  // If no historical data, fall back to naive target
+  if (!historicalDayLogs || historicalDayLogs.length === 0) {
+    return {
+      dailyDeficit: naive.dailyDeficit,
+      daysRemaining,
+      totalRemaining: totalKcalToLose,
+      isAdaptive: false,
+    };
+  }
+
+  // Compute total achieved deficit from past days
+  const totalAchievedDeficit = historicalDayLogs.reduce((sum, day) => {
+    const dayDeficit = profile.basalMetabolism + (day.totalOut || 0) - (day.totalIn || 0);
+    return sum + dayDeficit;
+  }, 0);
+
+  const remainingToLose = totalKcalToLose - totalAchievedDeficit;
+  let adaptiveTarget = Math.round(remainingToLose / daysRemaining);
+
+  // Clamp between reasonable bounds: never below 200, never above 2x naive target
+  const minTarget = 200;
+  const maxTarget = naive.dailyDeficit * 2;
+  adaptiveTarget = Math.max(minTarget, Math.min(maxTarget, adaptiveTarget));
+
+  return {
+    dailyDeficit: adaptiveTarget,
+    daysRemaining,
+    totalRemaining: Math.max(0, remainingToLose),
+    isAdaptive: true,
+  };
+}
+
 export function formatDate(date) {
   const d = new Date(date);
   return d.toISOString().split('T')[0];

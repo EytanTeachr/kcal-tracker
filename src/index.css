@@ -315,6 +315,75 @@ input::placeholder {
   margin-top: 0.25rem;
 }
 
+/* ===== REMAINING CALORIES DISPLAY ===== */
+.remaining-display {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 1.5rem 1rem;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.remaining-number {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.remaining-unit {
+  font-size: 1.2rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.remaining-label {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.remaining-adaptive-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+  opacity: 0.7;
+}
+
+.gauge-container {
+  height: 10px;
+  background: var(--bg-input);
+  border-radius: 5px;
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.gauge-bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.5s ease, background-color 0.3s ease;
+}
+
+/* ===== SECONDARY SUMMARY CARDS ===== */
+.summary-cards.secondary .summary-card {
+  padding: 0.65rem 0.75rem;
+}
+
+.summary-cards.secondary .card-value {
+  font-size: 1.15rem;
+}
+
+.summary-cards.secondary .summary-card.highlight {
+  padding: 0.75rem;
+}
+
+.summary-cards.secondary .card-sub {
+  font-size: 0.78rem;
+}
+
+.summary-cards.secondary .card-target {
+  font-size: 0.72rem;
+}
+
 /* ===== MACROS CARD ===== */
 .macros-card {
   background: var(--bg-card);
@@ -1293,6 +1362,273 @@ input::placeholder {
   margin-top: 0.5rem;
 }
 
+/* ===== PHOTO FOOD EDITOR ===== */
+.photo-editor {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.photo-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+
+.photo-editor-list {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.photo-editor-item {
+  background: var(--bg-input);
+  border-radius: 10px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.photo-editor-item-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.photo-editor-name {
+  flex: 1;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.photo-editor-name:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.photo-editor-remove {
+  background: none;
+  border: none;
+  color: var(--red);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.photo-editor-remove:hover {
+  background: rgba(248, 113, 113, 0.15);
+}
+
+.photo-editor-item-bottom {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.photo-editor-qty {
+  width: 70px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  text-align: center;
+  font-family: inherit;
+}
+
+.photo-editor-qty:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.photo-editor-unit {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.photo-editor-unit:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.state-toggle {
+  padding: 0.4rem 0.75rem;
+  border-radius: 20px;
+  border: 1.5px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.state-toggle.cooked {
+  background: var(--primary);
+  color: white;
+}
+
+.state-toggle.raw {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.photo-editor-actions {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ===== FAVORITES ===== */
+.favorite-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 100px;
+  max-height: 250px;
+}
+
+.favorite-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-input);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 2px solid transparent;
+}
+
+.favorite-item:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.favorite-item.selected {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.favorite-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.favorite-item-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.favorite-item-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.favorite-multiplier {
+  padding: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.favorite-multiplier-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.favorite-multiplier-buttons {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.favorite-multiplier-input {
+  width: 65px;
+  text-align: center;
+  padding: 0.4rem 0.5rem;
+  border-radius: 20px;
+  border: 1.5px solid var(--bg-input);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.favorite-multiplier-input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.favorite-multiplier-total {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--primary);
+  text-align: center;
+}
+
+/* ===== FAVORITE BUTTON IN GRID ===== */
+.btn-add.btn-favorite {
+  border-color: rgba(250, 204, 21, 0.3);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.btn-add.btn-favorite:hover {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, 0.15);
+}
+
+/* ===== SAVE FAVORITE PROMPT ===== */
+.save-fav-prompt {
+  padding: 0.5rem 0;
+  animation: fadeIn 0.2s ease;
+}
+
+.save-fav-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.save-fav-input {
+  flex: 1;
+  border-radius: 20px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar {
   width: 4px;
@@ -1305,4 +1641,285 @@ input::placeholder {
 ::-webkit-scrollbar-thumb {
   background: var(--bg-input);
   border-radius: 2px;
+}
+
+/* ===== QUICK ACTIVITIES ===== */
+.quick-activities-section { margin-bottom: 0.5rem; }
+.quick-activities-title { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+.quick-activities-scroll { display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.quick-activities-scroll::-webkit-scrollbar { display: none; }
+.activity-card { min-width: 120px; background: var(--bg-card); border-radius: var(--radius); padding: 0.75rem; text-align: center; cursor: pointer; transition: all 0.15s ease; border: 1.5px solid transparent; flex-shrink: 0; }
+.activity-card:hover { border-color: var(--primary); }
+.activity-card:active { transform: scale(0.96); }
+.activity-card.added { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+.activity-card-emoji { font-size: 1.5rem; }
+.activity-card-name { font-size: 0.8rem; font-weight: 600; margin-top: 0.25rem; color: var(--text); }
+.activity-card-info { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.15rem; }
+.activity-card-kcal { font-size: 0.8rem; font-weight: 700; color: var(--primary); margin-top: 0.25rem; }
+
+/* ===== FRIENDS SYSTEM ===== */
+.friends-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.friends-page h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.friends-section {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.friends-section h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 8px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.friend-item:last-child {
+  border-bottom: none;
+}
+
+.friend-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.friend-item.pending {
+  cursor: default;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.friend-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.friend-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.friend-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.friend-email {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.btn-remove-friend {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-remove-friend:hover {
+  color: var(--red);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.friend-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.permission-select {
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--bg-input);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+
+.btn-small {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.add-friend-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.add-friend-form input {
+  width: 100%;
+}
+
+.search-error {
+  color: var(--red);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.search-result {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.search-result p {
+  font-size: 0.9rem;
+}
+
+/* ===== FRIEND PROFILE ===== */
+.friend-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.friend-profile h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+}
+
+.friend-profile-email {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: -0.5rem;
+}
+
+.friend-add-entry {
+  margin-top: 0.5rem;
+}
+
+.friend-add-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.friend-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.friend-add-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ===== ENCOURAGEMENT SECTION ===== */
+.encouragement-section {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+  margin-top: 0.5rem;
+}
+
+.encouragement-section h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.encouragement-input {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.encouragement-input input {
+  flex: 1;
+}
+
+.encouragement-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.85rem;
+}
+
+.encouragement-item:last-child {
+  border-bottom: none;
+}
+
+.encouragement-sender {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.encouragement-message {
+  flex: 1;
+  color: var(--text);
+}
+
+.encouragement-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ===== SETTINGS HINT TEXT ===== */
+.hint-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  opacity: 0.8;
 }

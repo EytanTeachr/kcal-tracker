@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { getEntriesForDate, addEntry, addMultipleEntries, updateEntry, deleteEntry } from '../utils/db';
-import { getDailyTarget, getDayBalance, getDayStatus, kcalToKgFat, formatDate, formatDateFR } from '../utils/kcal';
-import { chatWithAI, getMotivationMessage } from '../utils/ai';
+import { getEntriesForDate, addEntry, addMultipleEntries, updateEntry, deleteEntry, getHistoricalDeficits, addFavorite } from '../utils/db';
+import { getDailyTarget, getAdaptiveDailyTarget, getDayBalance, getDayStatus, kcalToKgFat, formatDate, formatDateFR } from '../utils/kcal';
+import { chatWithAI, getMotivationMessage, calculateItemsKcal } from '../utils/ai';
 import BarcodeScanner from '../components/BarcodeScanner';
+import PhotoFoodEditor from '../components/PhotoFoodEditor';
+import FavoritePicker from '../components/FavoritePicker';
+import QuickActivities from '../components/QuickActivities';
 
 export default function Dashboard({ profile }) {
   const today = formatDate(new Date());
@@ -18,10 +21,16 @@ export default function Dashboard({ profile }) {
   const [editKcal, setEditKcal] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [motivation, setMotivation] = useState('');
+  const [adaptiveTarget, setAdaptiveTarget] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [photoEditItems, setPhotoEditItems] = useState(null);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [lastSavedItems, setLastSavedItems] = useState(null);
+  const [saveFavName, setSaveFavName] = useState('');
+  const [showSaveFav, setShowSaveFav] = useState(false);
 
-  const target = getDailyTarget(profile);
+  const target = adaptiveTarget || getDailyTarget(profile);
   const balance = getDayBalance(dayLog, profile.basalMetabolism);
   const status = target ? getDayStatus(balance.deficit, target.dailyDeficit) : 'green';
 
@@ -39,6 +48,26 @@ export default function Dashboard({ profile }) {
       });
     return () => { cancelled = true; };
   }, [profile.id, selectedDate]);
+
+  // Load historical deficits for adaptive target
+  useEffect(() => {
+    if (!profile.targetDate) return;
+    let cancelled = false;
+
+    const startDate = profile.createdAt ? profile.createdAt.split('T')[0] : formatDate(new Date(Date.now() - 90 * 86400000));
+    const endDate = selectedDate; // don't include selected date itself
+
+    getHistoricalDeficits(profile.id, startDate, endDate)
+      .then((history) => {
+        if (!cancelled) {
+          const adaptive = getAdaptiveDailyTarget(profile, history);
+          setAdaptiveTarget(adaptive);
+        }
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [profile.id, profile.targetDate, selectedDate, dayLog]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,6 +91,7 @@ export default function Dashboard({ profile }) {
     setChatMode(null);
     setMessages([]);
     setApiHistory([]);
+    setPhotoEditItems(null);
   };
 
   const reloadEntries = async () => {
@@ -113,6 +143,12 @@ export default function Dashboard({ profile }) {
         await addMultipleEntries(profile.id, selectedDate, type, entries, result.advice);
         await reloadEntries();
 
+        // Enable save as favorite for meals
+        if (chatMode === 'meal') {
+          setLastSavedItems(result.items);
+          setShowSaveFav(true);
+        }
+
         // Show advice if available
         if (result.advice) {
           setTimeout(() => {
@@ -161,7 +197,7 @@ export default function Dashboard({ profile }) {
       const photoMessage = {
         role: 'user',
         content: [
-          { type: 'text', text: "Voici la photo de ce que j'ai mangé. Identifie les aliments et estime les calories." },
+          { type: 'text', text: "Voici la photo de ce que j'ai mangé. Identifie les aliments et estime les quantités." },
           { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
         ],
       };
@@ -172,7 +208,13 @@ export default function Dashboard({ profile }) {
       try {
         const result = await chatWithAI(profile.apiKey, [photoMessage], 'photo');
 
-        if (result.type === 'final') {
+        if (result.type === 'detected') {
+          // New flow: show editable list
+          setPhotoEditItems(result.items);
+          setChatMode('photo_edit');
+          setMessages([]);
+        } else if (result.type === 'final') {
+          // Fallback: old behavior
           const summary = result.items.map((it) => `🍽️ ${it.description} — ${it.kcal} kcal`).join('\n');
           setMessages([{ role: 'assistant', content: summary }]);
           const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -183,6 +225,8 @@ export default function Dashboard({ profile }) {
           }));
           await addMultipleEntries(profile.id, selectedDate, 'meal', entries, result.advice);
           await reloadEntries();
+          setLastSavedItems(result.items);
+          setShowSaveFav(true);
           if (result.advice) {
             setTimeout(() => {
               setMessages((prev) => [...prev, { role: 'advice', content: result.advice }, { role: 'system', content: 'Ajouté !' }]);
@@ -204,6 +248,71 @@ export default function Dashboard({ profile }) {
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const handlePhotoConfirm = async (editedItems) => {
+    setLoading(true);
+    try {
+      const result = await calculateItemsKcal(profile.apiKey, editedItems);
+      const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const entries = result.items.map((item) => ({
+        description: item.description,
+        kcal: item.kcal,
+        proteins: item.proteins || 0,
+        lipids: item.lipids || 0,
+        carbs: item.carbs || 0,
+        detail: result.detail || '',
+        time,
+      }));
+      await addMultipleEntries(profile.id, selectedDate, 'meal', entries, result.advice);
+      await reloadEntries();
+
+      setLastSavedItems(result.items);
+      setShowSaveFav(true);
+
+      // Switch to chat to show summary
+      setPhotoEditItems(null);
+      setChatMode('photo');
+      const summary = result.items.map((it) => `🍽️ ${it.description} — ${it.kcal} kcal`).join('\n');
+      setMessages([{ role: 'assistant', content: summary }]);
+      if (result.advice) {
+        setTimeout(() => {
+          setMessages((prev) => [...prev, { role: 'advice', content: result.advice }, { role: 'system', content: 'Ajouté !' }]);
+        }, 300);
+      } else {
+        setTimeout(() => {
+          setMessages((prev) => [...prev, { role: 'system', content: 'Ajouté !' }]);
+        }, 500);
+      }
+    } catch (err) {
+      setMessages([{ role: 'assistant', content: `Erreur : ${err.message}` }]);
+      setPhotoEditItems(null);
+      setChatMode('photo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveFavorite = async () => {
+    const name = saveFavName === '_editing_' ? '' : saveFavName.trim();
+    if (!name || !lastSavedItems) return;
+    try {
+      await addFavorite(profile.id, name, lastSavedItems);
+      setShowSaveFav(false);
+      setSaveFavName('');
+      setLastSavedItems(null);
+      setMessages((prev) => [...prev, { role: 'system', content: 'Favori sauvegardé !' }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: `Erreur : ${err.message}` }]);
+    }
+  };
+
+  const handleFavoriteAdd = async (entries) => {
+    try {
+      await addMultipleEntries(profile.id, selectedDate, 'meal', entries, '');
+      await reloadEntries();
+      setShowFavorites(false);
+    } catch {}
   };
 
   const handleBarcodeAdd = async (item) => {
@@ -289,6 +398,12 @@ export default function Dashboard({ profile }) {
             await addMultipleEntries(profile.id, selectedDate, type, entries, result.advice);
             await reloadEntries();
 
+            // Enable save as favorite for meals/photo
+            if (chatMode === 'meal' || chatMode === 'photo') {
+              setLastSavedItems(result.items);
+              setShowSaveFav(true);
+            }
+
             if (result.advice) {
               setTimeout(() => {
                 setMessages((prev) => [...prev, { role: 'advice', content: result.advice }, { role: 'system', content: 'Ajouté ! Tu peux continuer ou fermer le chat.' }]);
@@ -354,8 +469,70 @@ export default function Dashboard({ profile }) {
         </div>
       ) : (
         <>
-          {/* Summary cards */}
-          <div className="summary-cards">
+          {/* Remaining calories display */}
+          {(() => {
+            const activitiesOut = dayLog.totalOut || 0;
+            const totalBudget = target
+              ? profile.basalMetabolism + activitiesOut - target.dailyDeficit
+              : profile.basalMetabolism + activitiesOut;
+            const remaining = totalBudget - balance.totalIn;
+
+            let gaugeColor, remainingColor;
+            if (remaining > 100) {
+              gaugeColor = '#16a34a';
+              remainingColor = '#16a34a';
+            } else if (remaining >= -100) {
+              gaugeColor = '#4ade80';
+              remainingColor = '#4ade80';
+            } else if (remaining >= -200) {
+              gaugeColor = '#facc15';
+              remainingColor = '#facc15';
+            } else if (remaining >= -400) {
+              gaugeColor = '#fb923c';
+              remainingColor = '#fb923c';
+            } else {
+              gaugeColor = '#f87171';
+              remainingColor = '#f87171';
+            }
+
+            // Gauge fill: 100% when remaining == totalBudget (nothing eaten), 0% when remaining <= 0
+            const gaugePct = totalBudget > 0
+              ? Math.max(0, Math.min(100, (remaining / totalBudget) * 100))
+              : 0;
+
+            return (
+              <div className="remaining-display">
+                <div className="remaining-number" style={{ color: remainingColor }}>
+                  {remaining > 0 ? remaining : remaining}
+                  <span className="remaining-unit"> kcal</span>
+                </div>
+                <div className="remaining-label">
+                  {remaining > 0
+                    ? 'Il te reste à manger'
+                    : remaining === 0
+                      ? 'Pile sur ton objectif !'
+                      : `Dépassement de ${Math.abs(remaining)} kcal`}
+                </div>
+                <div className="gauge-container">
+                  <div
+                    className="gauge-bar"
+                    style={{
+                      width: `${gaugePct}%`,
+                      backgroundColor: gaugeColor,
+                    }}
+                  />
+                </div>
+                {target && target.isAdaptive && (
+                  <div className="remaining-adaptive-hint">
+                    Objectif adaptatif : -{target.dailyDeficit} kcal/jour
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Secondary summary cards */}
+          <div className="summary-cards secondary">
             <div className="summary-card">
               <div className="card-label">Consommé</div>
               <div className="card-value">{balance.totalIn} <small>kcal</small></div>
@@ -556,8 +733,28 @@ export default function Dashboard({ profile }) {
             </div>
           )}
 
+          {/* Favorites picker */}
+          {showFavorites && (
+            <FavoritePicker
+              profileId={profile.id}
+              selectedDate={selectedDate}
+              onAdd={handleFavoriteAdd}
+              onClose={() => setShowFavorites(false)}
+            />
+          )}
+
+          {/* Photo food editor */}
+          {chatMode === 'photo_edit' && photoEditItems && (
+            <PhotoFoodEditor
+              items={photoEditItems}
+              onConfirm={handlePhotoConfirm}
+              onCancel={closeChat}
+              loading={loading}
+            />
+          )}
+
           {/* Chat area */}
-          {chatMode && chatMode !== 'barcode' ? (
+          {chatMode && chatMode !== 'barcode' && chatMode !== 'photo_edit' ? (
             <div className="chat-area">
               <div className="chat-header">
                 <button className="btn-back" onClick={closeChat}>
@@ -621,6 +818,37 @@ export default function Dashboard({ profile }) {
                     <span className="dots">...</span>
                   </div>
                 )}
+                {showSaveFav && lastSavedItems && !saveFavName && (
+                  <div className="save-fav-prompt">
+                    <button
+                      className="btn-secondary"
+                      onClick={() => setSaveFavName('_editing_')}
+                      style={{ width: '100%' }}
+                    >
+                      Sauvegarder en favori
+                    </button>
+                  </div>
+                )}
+                {showSaveFav && lastSavedItems && saveFavName && (
+                  <div className="save-fav-prompt">
+                    <div className="save-fav-row">
+                      <input
+                        type="text"
+                        value={saveFavName === '_editing_' ? '' : saveFavName}
+                        onChange={(e) => setSaveFavName(e.target.value || '_editing_')}
+                        placeholder="Nom du favori..."
+                        className="save-fav-input"
+                        autoFocus
+                      />
+                      <button className="btn-primary" onClick={handleSaveFavorite} style={{ padding: '0.5rem 1rem' }}>
+                        OK
+                      </button>
+                      <button className="btn-cancel" onClick={() => { setShowSaveFav(false); setSaveFavName(''); }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
               <div className="chat-input-row">
@@ -637,8 +865,9 @@ export default function Dashboard({ profile }) {
                 </button>
               </div>
             </div>
-          ) : chatMode !== 'barcode' && (
+          ) : chatMode !== 'barcode' && !showFavorites && (
             <div className="add-buttons-container">
+              <QuickActivities profileId={profile.id} selectedDate={selectedDate} onAdded={reloadEntries} />
               <div className="add-buttons-grid">
                 <button className="btn-add meal" onClick={() => setChatMode('meal')}>
                   🍽️ Ajouter un repas
@@ -648,6 +877,9 @@ export default function Dashboard({ profile }) {
                 </button>
                 <button className="btn-add photo" onClick={() => fileInputRef.current?.click()}>
                   📸 Photo du plat
+                </button>
+                <button className="btn-add btn-favorite" onClick={() => setShowFavorites(true)}>
+                  ⭐ Favoris
                 </button>
                 <button className="btn-add barcode" onClick={() => setChatMode('barcode')}>
                   📷 Scanner un code-barres

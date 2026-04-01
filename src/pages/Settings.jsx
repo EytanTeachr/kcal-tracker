@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { updateProfile, deleteAllData } from '../utils/db';
+import { updateProfile, deleteAllData, updateProfilePin } from '../utils/db';
 
 export default function Settings({ profile, onUpdate, onLogout }) {
   const [firstName, setFirstName] = useState(profile.firstName);
@@ -9,6 +9,7 @@ export default function Settings({ profile, onUpdate, onLogout }) {
   const [occasion, setOccasion] = useState(profile.occasion || '');
   const [dailyProteinGoal, setDailyProteinGoal] = useState(profile.dailyProteinGoal || '');
   const [apiKey, setApiKey] = useState(profile.apiKey || '');
+  const [friendPin, setFriendPin] = useState(profile.friendPin || '');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
@@ -25,6 +26,7 @@ export default function Settings({ profile, onUpdate, onLogout }) {
         occasion,
         dailyProteinGoal: parseInt(dailyProteinGoal, 10) || 0,
         apiKey,
+        friendPin,
       };
       await updateProfile(updated);
       onUpdate(updated);
@@ -112,6 +114,29 @@ export default function Settings({ profile, onUpdate, onLogout }) {
             onChange={(e) => setApiKey(e.target.value)}
             placeholder="sk-..."
           />
+        </div>
+
+        <div className="form-group">
+          <label>Email</label>
+          <input
+            type="email"
+            value={profile.email || ''}
+            readOnly
+            style={{ opacity: 0.6 }}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Code PIN ami</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={friendPin}
+            onChange={(e) => setFriendPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="4 a 6 chiffres"
+          />
+          <p className="hint-text">Partage ce code avec tes amis pour qu'ils puissent t'ajouter</p>
         </div>
 
         <button className="btn-primary" onClick={handleSave} disabled={saving}>

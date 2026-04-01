@@ -71,3 +71,69 @@ create policy "Users can delete own entries" on daily_entries
   for delete using (
     profile_id in (select id from profiles where user_id = auth.uid())
   );
+
+-- Favorite meals
+create table if not exists favorite_meals (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid references profiles(id) on delete cascade not null,
+  name text not null,
+  items jsonb not null,
+  created_at timestamp with time zone default now()
+);
+
+alter table favorite_meals enable row level security;
+
+create policy "Users manage own favorites" on favorite_meals
+  for all using (profile_id in (select id from profiles where user_id = auth.uid()));
+
+-- ============================================
+-- FRIENDS SYSTEM
+-- ============================================
+
+-- Add friend_pin and email to profiles
+alter table profiles add column if not exists friend_pin text default '';
+alter table profiles add column if not exists email text default '';
+
+-- Friendships table
+create table if not exists friendships (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid references profiles(id) on delete cascade not null,
+  addressee_id uuid references profiles(id) on delete cascade not null,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
+  permission text not null default 'read' check (permission in ('read', 'write')),
+  created_at timestamp with time zone default now(),
+  unique(requester_id, addressee_id)
+);
+alter table friendships enable row level security;
+create policy "Users view own friendships" on friendships for select using (
+  requester_id in (select id from profiles where user_id = auth.uid())
+  or addressee_id in (select id from profiles where user_id = auth.uid())
+);
+create policy "Users send requests" on friendships for insert with check (
+  requester_id in (select id from profiles where user_id = auth.uid())
+);
+create policy "Users update friendships" on friendships for update using (
+  requester_id in (select id from profiles where user_id = auth.uid())
+  or addressee_id in (select id from profiles where user_id = auth.uid())
+);
+create policy "Users delete friendships" on friendships for delete using (
+  requester_id in (select id from profiles where user_id = auth.uid())
+  or addressee_id in (select id from profiles where user_id = auth.uid())
+);
+
+-- Encouragements table
+create table if not exists encouragements (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid references profiles(id) on delete cascade not null,
+  receiver_id uuid references profiles(id) on delete cascade not null,
+  message text not null,
+  created_at timestamp with time zone default now()
+);
+alter table encouragements enable row level security;
+create policy "Users view own encouragements" on encouragements for select using (
+  receiver_id in (select id from profiles where user_id = auth.uid())
+  or sender_id in (select id from profiles where user_id = auth.uid())
+);
+create policy "Users send encouragements" on encouragements for insert with check (
+  sender_id in (select id from profiles where user_id = auth.uid())
+);
