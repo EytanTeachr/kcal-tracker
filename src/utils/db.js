@@ -426,6 +426,35 @@ export async function respondToFriendRequest(friendshipId, status, permission) {
   if (error) throw new Error(`Erreur réponse demande: ${error.message}`);
 }
 
+// Helper: load profiles by IDs using RPC (bypasses RLS)
+async function loadProfilesByIds(ids) {
+  if (!ids || ids.length === 0) return {};
+
+  const { data, error } = await supabase.rpc('get_friend_profiles', {
+    profile_ids: ids,
+  });
+
+  if (error) {
+    console.error('get_friend_profiles RPC error:', error.message);
+    return {};
+  }
+
+  const profileMap = {};
+  for (const p of data || []) {
+    profileMap[p.id] = {
+      id: p.id,
+      firstName: p.first_name,
+      email: p.email,
+      basalMetabolism: p.basal_metabolism,
+      targetWeightLoss: parseFloat(p.target_weight_loss),
+      targetDate: p.target_date,
+      occasion: p.occasion || '',
+      dailyProteinGoal: p.daily_protein_goal || 0,
+    };
+  }
+  return profileMap;
+}
+
 export async function getFriends(profileId) {
   const { data, error } = await supabase
     .from('friendships')
@@ -441,17 +470,7 @@ export async function getFriends(profileId) {
 
   if (friendIds.length === 0) return [];
 
-  const { data: profiles, error: pErr } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('id', friendIds);
-
-  if (pErr) throw new Error(`Erreur chargement profils amis: ${pErr.message}`);
-
-  const profileMap = {};
-  for (const p of profiles || []) {
-    profileMap[p.id] = mapProfile(p);
-  }
+  const profileMap = await loadProfilesByIds(friendIds);
 
   return (data || []).map((f) => {
     const friendId = f.requester_id === profileId ? f.addressee_id : f.requester_id;
@@ -475,17 +494,7 @@ export async function getPendingRequests(profileId) {
   const requesterIds = (data || []).map((f) => f.requester_id);
   if (requesterIds.length === 0) return [];
 
-  const { data: profiles, error: pErr } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('id', requesterIds);
-
-  if (pErr) throw new Error(`Erreur chargement profils: ${pErr.message}`);
-
-  const profileMap = {};
-  for (const p of profiles || []) {
-    profileMap[p.id] = mapProfile(p);
-  }
+  const profileMap = await loadProfilesByIds(requesterIds);
 
   return (data || []).map((f) => ({
     friendshipId: f.id,
