@@ -375,19 +375,29 @@ export async function updateProfilePin(profileId, pin) {
 }
 
 export async function findProfileByEmailAndPin(email, pin) {
-  // Use RPC function to bypass RLS (search other users' profiles)
+  // Try RPC function first (bypasses RLS to search other users)
   const { data, error } = await supabase.rpc('find_friend_by_email_and_pin', {
     search_email: email,
     search_pin: pin,
   });
 
-  if (error || !data || data.length === 0) return null;
-  const d = data[0];
-  return {
-    id: d.id,
-    firstName: d.first_name,
-    email: d.email,
-  };
+  console.log('RPC find_friend result:', { data, error });
+
+  if (!error && data && data.length > 0) {
+    const d = data[0];
+    return {
+      id: d.id,
+      firstName: d.first_name,
+      email: d.email,
+    };
+  }
+
+  // If RPC function doesn't exist, log a helpful message
+  if (error) {
+    console.error('RPC error (make sure find_friend_by_email_and_pin function exists in Supabase):', error.message);
+  }
+
+  return null;
 }
 
 export async function sendFriendRequest(requesterId, addresseeId) {
