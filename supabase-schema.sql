@@ -137,3 +137,58 @@ create policy "Users view own encouragements" on encouragements for select using
 create policy "Users send encouragements" on encouragements for insert with check (
   sender_id in (select id from profiles where user_id = auth.uid())
 );
+
+-- ============================================
+-- RPC FUNCTION: Find friend by email + PIN (bypasses RLS)
+-- ============================================
+create or replace function find_friend_by_email_and_pin(search_email text, search_pin text)
+returns table(id uuid, first_name text, email text)
+language sql
+security definer
+as $$
+  select id, first_name, email
+  from profiles
+  where email = search_email
+    and friend_pin = search_pin
+    and friend_pin != ''
+  limit 1;
+$$;
+
+-- ============================================
+-- RLS: Friends can view each other's entries
+-- ============================================
+create policy "Friends can view entries" on daily_entries
+  for select using (
+    profile_id in (
+      select case
+        when f.requester_id in (select id from profiles where user_id = auth.uid())
+        then f.addressee_id
+        else f.requester_id
+      end
+      from friendships f
+      where f.status = 'accepted'
+      and (
+        f.requester_id in (select id from profiles where user_id = auth.uid())
+        or f.addressee_id in (select id from profiles where user_id = auth.uid())
+      )
+    )
+  );
+
+-- Friends with write permission can insert entries
+create policy "Friends can add entries" on daily_entries
+  for insert with check (
+    profile_id in (
+      select case
+        when f.requester_id in (select id from profiles where user_id = auth.uid())
+        then f.addressee_id
+        else f.requester_id
+      end
+      from friendships f
+      where f.status = 'accepted'
+      and f.permission = 'write'
+      and (
+        f.requester_id in (select id from profiles where user_id = auth.uid())
+        or f.addressee_id in (select id from profiles where user_id = auth.uid())
+      )
+    )
+  );

@@ -51,6 +51,7 @@ export async function createProfile(profile) {
       api_key: profile.apiKey,
       occasion: profile.occasion || '',
       daily_protein_goal: profile.dailyProteinGoal || 0,
+      email: user.email || '',
     })
     .select()
     .single();
@@ -374,15 +375,19 @@ export async function updateProfilePin(profileId, pin) {
 }
 
 export async function findProfileByEmailAndPin(email, pin) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('email', email)
-    .eq('friend_pin', pin)
-    .single();
+  // Use RPC function to bypass RLS (search other users' profiles)
+  const { data, error } = await supabase.rpc('find_friend_by_email_and_pin', {
+    search_email: email,
+    search_pin: pin,
+  });
 
-  if (error || !data) return null;
-  return mapProfile(data);
+  if (error || !data || data.length === 0) return null;
+  const d = data[0];
+  return {
+    id: d.id,
+    firstName: d.first_name,
+    email: d.email,
+  };
 }
 
 export async function sendFriendRequest(requesterId, addresseeId) {
