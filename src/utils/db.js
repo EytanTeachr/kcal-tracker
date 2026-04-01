@@ -31,6 +31,8 @@ export async function getProfile() {
     .eq('user_id', user.id)
     .single();
 
+  console.log('getProfile query result:', { data, error, userId: user.id });
+
   if (error || !data) return null;
 
   return mapProfile(data);

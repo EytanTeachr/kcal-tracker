@@ -67,9 +67,12 @@ function App() {
 
     getProfile()
       .then((p) => {
+        console.log('getProfile result:', p);
         if (p) setProfile(p);
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error('getProfile error:', err);
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
